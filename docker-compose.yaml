@@ -1,0 +1,143 @@
+services:
+  proxy:
+    container_name: 'chirp_lb'
+    restart: always
+    build: ./proxy
+    ports:
+      - '80:80'
+    logging:
+      driver: none # use fluentd or logstash for ELK
+  api:
+    container_name: 'chirp_api'
+    restart: always
+    build: ./api
+    ports:
+      - '8000:8000'
+    depends_on:
+      - database
+      - rabbitmq
+      - redis
+      - proxy
+    logging:
+      driver: none # use fluentd or logstash for ELK
+  search:
+    container_name: 'chirp_search'
+    restart: always
+    build: ./search
+    ports:
+      - '8001:8001'
+    depends_on:
+      - elasticsearch
+      - rabbitmq
+      - proxy
+    logging:
+      driver: none # use fluentd or logstash for ELK
+  timeline:
+    container_name: 'chirp_timeline'
+    restart: always
+    build: ./timeline
+    ports:
+      - '8002:8002'
+    depends_on:
+      - rabbitmq
+      - redis
+      - database
+      - proxy
+    logging:
+      driver: none # use fluentd or logstash for ELK
+  tweet:
+    container_name: 'chirp_tweet'
+    restart: always
+    build: ./tweet
+    ports:
+      - '8003:8003'
+    depends_on:
+      - database
+      - redis
+      - rabbitmq
+      - proxy
+    logging:
+      driver: none # use fluentd or logstash for ELK
+  analytics:
+    container_name: 'chirp_analytics'
+    restart: always
+    build: ./analytics
+    ports:
+      - '8004:8004'
+    depends_on:
+      - elasticsearch
+      - redis
+      - rabbitmq
+    logging:
+      driver: none # use fluentd or logstash for ELK
+  notifications:
+    container_name: 'chirp_notifications'
+    restart: always
+    build: ./notify
+    ports:
+      - '8005:8005'
+    depends_on:
+      - rabbitmq
+      - redis
+      - database
+      - proxy
+  elasticsearch:
+    image: 'docker.elastic.co/elasticsearch/elasticsearch:7.17.10'
+    environment:
+      - 'ELASTIC_PASSWORD=secret'
+      - 'discovery.type=single-node'
+      - 'xpack.security.enabled=false'
+    ports:
+      - '9200'
+      - '9300'
+  database:
+    image: 'postgres:latest'
+    restart: always
+    environment:
+      - 'POSTGRES_DB=mydatabase'
+      - 'POSTGRES_PASSWORD=secret'
+      - 'POSTGRES_USER=myuser'
+    ports:
+      - '5432'
+    volumes:
+      - db:/var/lib/postgresql/data
+    logging:
+      driver: none # use fluentd or logstash for ELK
+  rabbitmq:
+    image: 'rabbitmq:latest'
+    environment:
+      - 'RABBITMQ_DEFAULT_PASS=secret'
+      - 'RABBITMQ_DEFAULT_USER=myuser'
+    ports:
+      - '5672'
+  redis:
+    image: 'redis:latest'
+    ports:
+      - '6379'
+  prometheus:
+    image: 'prometheus:latest'
+    restart: always
+    ports:
+      - '8074:8074'
+    depends_on:
+      - api
+      - tweet
+      - timeline
+      - notifications
+      - search
+  grafana:
+    image: grafana/grafana:latest
+    user: 'grafana'
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    networks:
+      - chirp
+    volumes:
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
+networks:
+  default:
+    external:
+      name: chirp
+volumes:
+  db:
